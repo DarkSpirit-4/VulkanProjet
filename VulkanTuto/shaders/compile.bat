@@ -1,0 +1,1 @@
+C:/VulkanSDK/1.4.357.0/bin/slangc.exe
