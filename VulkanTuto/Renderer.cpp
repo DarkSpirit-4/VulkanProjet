@@ -324,6 +324,7 @@ static std::vector<char> readFile(const std::string& filename)
 	{
 		throw std::runtime_error("failed to open file!");
 	}
+
 	std::vector<char> buffer(file.tellg());
 	file.seekg(0, std::ios::beg);
 	file.read(buffer.data(), static_cast<std::streamsize>(buffer.size()));
@@ -424,12 +425,11 @@ void Renderer::recordCommandBuffer(uint32_t imageIndex)
 			.colorAttachmentCount = 1,
 			.pColorAttachments = &attachmentInfo };
 
-	// Begin rendering
 	commandBuffer.beginRendering(renderingInfo);
-
-	// Rendering commands will go here
-
-	// End rendering
+	commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, *graphicsPipeline);
+	commandBuffer.setViewport(0, vk::Viewport(0.0f, 0.0f, static_cast<float>(swapChainExtent.width), static_cast<float>(swapChainExtent.height), 0.0f, 1.0f));
+	commandBuffer.setScissor(0, vk::Rect2D(vk::Offset2D(0, 0), swapChainExtent));
+	commandBuffer.draw(3, 1, 0, 0);
 	commandBuffer.endRendering();
 
 	// Transition the image layout for presentation
@@ -524,6 +524,18 @@ void Renderer::drawFrame()
 	.swapchainCount = 1,
 	.pSwapchains = &*swapChain,
 	.pImageIndices = &imageIndex };
+
+	result = graphicsQueue.presentKHR(presentInfoKHR);
+	switch (result)
+	{
+	case vk::Result::eSuccess:
+		break;
+	case vk::Result::eSuboptimalKHR:
+		std::cout << "vk::Queue::presentKHR returned vk::Result::eSuboptimalKHR !\n";
+		break;
+	default:
+		break;
+	}
 
 }
 

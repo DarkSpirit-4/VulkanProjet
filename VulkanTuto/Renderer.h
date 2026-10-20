@@ -19,6 +19,7 @@ public:
 	void drawFrame();
 	void createSyncObjects();
 	void transition_image_layout(uint32_t imageIndex, vk::ImageLayout old_layout, vk::ImageLayout new_layout, vk::AccessFlags2 src_access_mask, vk::AccessFlags2 dst_access_mask, vk::PipelineStageFlags2 src_stage_mask, vk::PipelineStageFlags2 dst_stage_mask);
+	void SetupCallback();
 
 private:
 	vk::raii::Context context;
@@ -65,6 +66,4 @@ private:
 
 	std::vector<const char*> requiredDeviceExtension = {
 	vk::KHRSwapchainExtensionName };
-
-	void SetupCallback();
 };
