@@ -42,15 +42,8 @@ void Renderer::CreateInstance()
 		}
 
 	}
-	
-
-	const std::vector validationLayers = { "VK_LAYER_KHRONOS_validation" };
-
 
 		std::vector<char const*> requiredLayers = GetRequiredLayers();
-
-		if (Debug::enableDebug)
-			requiredLayers.assign_range(validationLayers);
 
 		auto layerProperties = context.enumerateInstanceLayerProperties();
 
@@ -398,4 +391,145 @@ void Renderer::createGraphicsPipeline()
 	vk::raii::ShaderModule     shaderModule{ device, createInfo };
 
 	return shaderModule;
+}
+
+void Renderer::recordCommandBuffer(uint32_t imageIndex)
+{
+	commandBuffer.begin({});
+
+	// Transition the image layout for rendering
+	transition_image_layout(
+		imageIndex,
+		vk::ImageLayout::eUndefined,
+		vk::ImageLayout::eColorAttachmentOptimal,
+		{},
+		vk::AccessFlagBits2::eColorAttachmentWrite,
+		vk::PipelineStageFlagBits2::eColorAttachmentOutput,
+		vk::PipelineStageFlagBits2::eColorAttachmentOutput
+	);
+
+	// Set up the color attachment
+	vk::ClearValue clearColor = vk::ClearColorValue(0.0f, 0.0f, 0.0f, 1.0f);
+	vk::RenderingAttachmentInfo attachmentInfo = {
+			.imageView = swapChainImageViews[imageIndex],
+			.imageLayout = vk::ImageLayout::eColorAttachmentOptimal,
+			.loadOp = vk::AttachmentLoadOp::eClear,
+			.storeOp = vk::AttachmentStoreOp::eStore,
+			.clearValue = clearColor };
+
+	// Set up the rendering info
+	vk::RenderingInfo renderingInfo = {
+			.renderArea = {.offset = {0, 0}, .extent = swapChainExtent},
+			.layerCount = 1,
+			.colorAttachmentCount = 1,
+			.pColorAttachments = &attachmentInfo };
+
+	// Begin rendering
+	commandBuffer.beginRendering(renderingInfo);
+
+	// Rendering commands will go here
+
+	// End rendering
+	commandBuffer.endRendering();
+
+	// Transition the image layout for presentation
+	transition_image_layout(
+		imageIndex,
+		vk::ImageLayout::eColorAttachmentOptimal,
+		vk::ImageLayout::ePresentSrcKHR,
+		vk::AccessFlagBits2::eColorAttachmentWrite,
+		{},
+		vk::PipelineStageFlagBits2::eColorAttachmentOutput,
+		vk::PipelineStageFlagBits2::eBottomOfPipe
+	);
+
+	commandBuffer.end();
+}
+
+void Renderer::createCommandPool()
+{
+	vk::CommandPoolCreateInfo poolInfo{ .flags = vk::CommandPoolCreateFlagBits::eResetCommandBuffer,
+								   .queueFamilyIndex = queueIndex };
+	commandPool = vk::raii::CommandPool(device, poolInfo);
+}
+
+void Renderer::createCommandBuffer()
+{
+	vk::CommandBufferAllocateInfo allocInfo{ .commandPool = commandPool, .level = vk::CommandBufferLevel::ePrimary, .commandBufferCount = 1 };
+
+	commandBuffer = std::move(vk::raii::CommandBuffers(device, allocInfo).front());
+}
+
+void Renderer::transition_image_layout(
+	uint32_t                imageIndex,
+	vk::ImageLayout         old_layout,
+	vk::ImageLayout         new_layout,
+	vk::AccessFlags2        src_access_mask,
+	vk::AccessFlags2        dst_access_mask,
+	vk::PipelineStageFlags2 src_stage_mask,
+	vk::PipelineStageFlags2 dst_stage_mask)
+{
+	vk::ImageMemoryBarrier2 barrier = {
+		.srcStageMask = src_stage_mask,
+		.srcAccessMask = src_access_mask,
+		.dstStageMask = dst_stage_mask,
+		.dstAccessMask = dst_access_mask,
+		.oldLayout = old_layout,
+		.newLayout = new_layout,
+		.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+		.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+		.image = swapChainImages[imageIndex],
+		.subresourceRange = {
+			   .aspectMask = vk::ImageAspectFlagBits::eColor,
+			   .baseMipLevel = 0,
+			   .levelCount = 1,
+			   .baseArrayLayer = 0,
+			   .layerCount = 1} };
+	vk::DependencyInfo dependency_info = {
+		.dependencyFlags = {},
+		.imageMemoryBarrierCount = 1,
+		.pImageMemoryBarriers = &barrier };
+	commandBuffer.pipelineBarrier2(dependency_info);
+}
+
+void Renderer::drawFrame()
+{
+	auto fenceResult = device.waitForFences(*drawFence, vk::True, UINT64_MAX);
+	if (fenceResult != vk::Result::eSuccess)
+	{
+		throw std::runtime_error("failed to wait for fence!");
+	}
+	device.resetFences(*drawFence);
+
+	auto [result, imageIndex] = swapChain.acquireNextImage(UINT64_MAX, *presentCompleteSemaphore, nullptr);
+
+	recordCommandBuffer(imageIndex);
+
+	graphicsQueue.waitIdle();
+
+	vk::PipelineStageFlags waitDestinationStageMask(vk::PipelineStageFlagBits::eColorAttachmentOutput);
+	const vk::SubmitInfo   submitInfo{ .waitSemaphoreCount = 1,
+									  .pWaitSemaphores = &*presentCompleteSemaphore,
+									  .pWaitDstStageMask = &waitDestinationStageMask,
+									  .commandBufferCount = 1,
+									  .pCommandBuffers = &*commandBuffer,
+									  .signalSemaphoreCount = 1,
+									  .pSignalSemaphores = &*renderFinishedSemaphore };
+
+	graphicsQueue.submit(submitInfo, *drawFence);
+
+	const vk::PresentInfoKHR presentInfoKHR{
+	.waitSemaphoreCount = 1,
+	.pWaitSemaphores = &*renderFinishedSemaphore,
+	.swapchainCount = 1,
+	.pSwapchains = &*swapChain,
+	.pImageIndices = &imageIndex };
+
+}
+
+void Renderer::createSyncObjects()
+{
+	presentCompleteSemaphore = vk::raii::Semaphore(device, vk::SemaphoreCreateInfo());
+	renderFinishedSemaphore = vk::raii::Semaphore(device, vk::SemaphoreCreateInfo());
+	drawFence = vk::raii::Fence(device, { .flags = vk::FenceCreateFlagBits::eSignaled });
 }
