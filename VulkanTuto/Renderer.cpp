@@ -175,17 +175,17 @@ void Renderer::createLogicalDevice()
 {
 	std::vector<vk::QueueFamilyProperties> queueFamilyProperties = physicalDevice.getQueueFamilyProperties();
 
-	uint32_t graphicsIndex = ~0;
+
 	for (uint32_t qfpIndex = 0; qfpIndex < queueFamilyProperties.size(); qfpIndex++)
 	{
 		if ((queueFamilyProperties[qfpIndex].queueFlags & vk::QueueFlagBits::eGraphics) &&
 			physicalDevice.getSurfaceSupportKHR(qfpIndex, *surface))
 		{
-			graphicsIndex = qfpIndex;
+			queueIndex = qfpIndex;
 			break;
 		}
 	}
-	if (graphicsIndex == ~0)
+	if (queueIndex == ~0)
 	{
 		throw std::runtime_error("Could not find a queue for graphics and present -> terminating");
 	}
@@ -194,7 +194,7 @@ void Renderer::createLogicalDevice()
 	/* auto graphicsIndex = static_cast<uint32_t>(std::distance(queueFamilyProperties.begin(), graphicsQueueFamilyProperty)); */
 
 	float queuePriority = 0.5f;
-	vk::DeviceQueueCreateInfo deviceQueueCreateInfo{ .queueFamilyIndex = graphicsIndex, .queueCount = 1, .pQueuePriorities = &queuePriority };
+	vk::DeviceQueueCreateInfo deviceQueueCreateInfo{ .queueFamilyIndex = queueIndex, .queueCount = 1, .pQueuePriorities = &queuePriority };
 
 	vk::StructureChain<vk::PhysicalDeviceFeatures2,
 		vk::PhysicalDeviceVulkan11Features,
@@ -221,7 +221,7 @@ void Renderer::createLogicalDevice()
 
 	device = vk::raii::Device(physicalDevice, deviceCreateInfo);
 
-	graphicsQueue = vk::raii::Queue(device, graphicsIndex, 0);
+	graphicsQueue = vk::raii::Queue(device, queueIndex, 0);
 }
 
 void Renderer::createSurface()
