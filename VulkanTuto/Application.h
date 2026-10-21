@@ -10,7 +10,8 @@ public:
 	int width = 800;
 	int height = 600;
 	GLFWwindow* window = nullptr;
-	Renderer* renderer = nullptr;
+	Renderer* renderer = nullptr; 
+	bool framebufferResized = false;
 
 	void Init();
 	void Run();
@@ -19,6 +20,7 @@ public:
 private:
 
 	void InitWindow();
+	static void framebufferResizeCallback(GLFWwindow* window, int width, int height);
 	void InitVulkan();	
 
 	void DestroyWindow();

@@ -15,11 +15,13 @@ public:
 	void SetWindow(GLFWwindow* window);
 	void recordCommandBuffer(uint32_t imageIndex);
 	void createCommandPool();
-	void createCommandBuffer();
+	void createCommandBuffers();
 	void drawFrame();
 	void createSyncObjects();
 	void transition_image_layout(uint32_t imageIndex, vk::ImageLayout old_layout, vk::ImageLayout new_layout, vk::AccessFlags2 src_access_mask, vk::AccessFlags2 dst_access_mask, vk::PipelineStageFlags2 src_stage_mask, vk::PipelineStageFlags2 dst_stage_mask);
 	void SetupCallback();
+	void cleanupSwapChain();
+	void recreateSwapChain();
 
 private:
 	vk::raii::Context context;
@@ -37,11 +39,16 @@ private:
 	vk::raii::PipelineLayout pipelineLayout = nullptr;
 	vk::raii::Pipeline graphicsPipeline = nullptr;
 	vk::raii::CommandPool commandPool = nullptr;
-	vk::raii::CommandBuffer commandBuffer = nullptr;
+	std::vector<vk::raii::CommandBuffer> commandBuffers;
 	uint32_t queueIndex = ~0;
-	vk::raii::Semaphore presentCompleteSemaphore = nullptr;
-	vk::raii::Semaphore renderFinishedSemaphore = nullptr;
-	vk::raii::Fence     drawFence = nullptr;
+	std::vector<vk::raii::Semaphore> presentCompleteSemaphores;
+	std::vector<vk::raii::Semaphore> renderFinishedSemaphores;
+	std::vector<vk::raii::Fence> inFlightFences;
+	bool framebufferResized = false;
+
+
+
+	uint32_t frameIndex = 0;
 
 
 	GLFWwindow* window = nullptr;
