@@ -6,12 +6,14 @@
 #include <cstdint>
 #include <limits>
 #include <algorithm>
-#include <array>
-
-#include <glm/gtc/matrix_transform.hpp>
-#include <chrono>
 
 constexpr int MAX_FRAMES_IN_FLIGHT = 2;
+
+
+void Renderer::SetWindow(GLFWwindow* _window)
+{
+	window = _window;
+}
 
 struct Vertex
 {
@@ -28,32 +30,13 @@ struct Vertex
 		return { {{.location = 0, .binding = 0, .format = vk::Format::eR32G32Sfloat, .offset = offsetof(Vertex, pos)},
 				 {.location = 1, .binding = 0, .format = vk::Format::eR32G32B32Sfloat, .offset = offsetof(Vertex, color)}} };
 	}
-
 };
-
-struct UniformBufferObject
-{
-	glm::mat4 model;
-	glm::mat4 view;
-	glm::mat4 proj;
-};
-
 
 const std::vector<Vertex> vertices = {
-	{{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}},
-	{{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}},
-	{{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}},
-	{{-0.5f, 0.5f}, {1.0f, 1.0f, 1.0f}}
+	{{0.0f, -0.5f}, {1.0f, 1.0f, 1.0f}},
+	{{0.5f, 0.5f}, {0.0f, 1.0f, 0.0f}},
+	{{-0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}}
 };
-
-const std::vector<uint16_t> indices = {
-	0, 1, 2, 2, 3, 0
-};
-
-void Renderer::SetWindow(GLFWwindow* _window)
-{
-	window = _window;
-}
 
 void Renderer::CreateInstance()
 {
@@ -85,22 +68,22 @@ void Renderer::CreateInstance()
 
 	}
 
-		std::vector<char const*> requiredLayers = GetRequiredLayers();
+	std::vector<char const*> requiredLayers = GetRequiredLayers();
 
-		auto layerProperties = context.enumerateInstanceLayerProperties();
+	auto layerProperties = context.enumerateInstanceLayerProperties();
 
-		auto unsupportedLayerIt = std::ranges::find_if(requiredLayers, [&layerProperties](auto const& requiredLayer)
-			{
-				return std::ranges::none_of(layerProperties, [requiredLayer](auto const& layerProperty)
-					{
-						return strcmp(layerProperty.layerName, requiredLayer) == 0;
-					});
-			});
-
-		if (unsupportedLayerIt != requiredLayers.end())
+	auto unsupportedLayerIt = std::ranges::find_if(requiredLayers, [&layerProperties](auto const& requiredLayer)
 		{
-			throw std::runtime_error("Required Layer not supported: " + std::string(*unsupportedLayerIt));
-		}
+			return std::ranges::none_of(layerProperties, [requiredLayer](auto const& layerProperty)
+				{
+					return strcmp(layerProperty.layerName, requiredLayer) == 0;
+				});
+		});
+
+	if (unsupportedLayerIt != requiredLayers.end())
+	{
+		throw std::runtime_error("Required Layer not supported: " + std::string(*unsupportedLayerIt));
+	}
 
 	vk::InstanceCreateInfo create_info
 	{
@@ -122,7 +105,7 @@ std::vector<char const*> Renderer::GetRequiredExtensions()
 	uint32_t glfwExtensionCount = 0;
 	auto glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
 
-	std::vector <char const*> requiredExtensions = {vk::EXTDebugUtilsExtensionName};
+	std::vector <char const*> requiredExtensions = { vk::EXTDebugUtilsExtensionName };
 
 	std::vector extensions(glfwExtensions, glfwExtensions + glfwExtensionCount);
 
@@ -183,6 +166,52 @@ void Renderer::recreateSwapChain()
 
 	createSwapChain();
 	createImageViews();
+}
+
+void Renderer::createVertexBuffer()
+{
+	vk::DeviceSize bufferSize = sizeof(vertices[0]) * vertices.size();
+
+	auto [stagingBuffer, stagingBufferMemory] =
+		createBuffer(bufferSize, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+
+	void* dataStaging = stagingBufferMemory.mapMemory(0, bufferSize);
+	memcpy(dataStaging, vertices.data(), bufferSize);
+	stagingBufferMemory.unmapMemory();
+
+	std::tie(vertexBuffer, vertexBufferMemory) =
+		createBuffer(bufferSize, vk::BufferUsageFlagBits::eVertexBuffer | vk::BufferUsageFlagBits::eTransferDst, vk::MemoryPropertyFlagBits::eDeviceLocal);
+
+	copyBuffer(stagingBuffer, vertexBuffer, bufferSize);
+}
+
+void Renderer::copyBuffer(vk::raii::Buffer& srcBuffer, vk::raii::Buffer& dstBuffer, vk::DeviceSize size)
+{
+	vk::CommandBufferAllocateInfo allocInfo{ .commandPool = commandPool, .level = vk::CommandBufferLevel::ePrimary, .commandBufferCount = 1 };
+	vk::raii::CommandBuffer commandCopyBuffer = std::move(device.allocateCommandBuffers(allocInfo).front());
+
+	commandCopyBuffer.begin({ .flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit });
+
+	commandCopyBuffer.copyBuffer(*srcBuffer, *dstBuffer, vk::BufferCopy(0, 0, size));
+
+	commandCopyBuffer.end();
+
+	graphicsQueue.submit(vk::SubmitInfo{ .commandBufferCount = 1, .pCommandBuffers = &*commandCopyBuffer }, nullptr);
+	graphicsQueue.waitIdle();
+}
+
+uint32_t Renderer::findMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags properties)
+{
+	vk::PhysicalDeviceMemoryProperties memProperties = physicalDevice.getMemoryProperties();
+	for (uint32_t i = 0; i < memProperties.memoryTypeCount; i++)
+	{
+		if ((typeFilter & (1 << i)) && (memProperties.memoryTypes[i].propertyFlags & properties) == properties)
+		{
+			return i;
+		}
+	}
+
+	throw std::runtime_error("failed to find suitable memory type!");
 }
 
 vk::Bool32 VKAPI_CALL Renderer::Callback(vk::DebugUtilsMessageSeverityFlagBitsEXT severity, vk::DebugUtilsMessageTypeFlagsEXT type, const vk::DebugUtilsMessengerCallbackDataEXT* pCallbackData, void* pUserData)
@@ -400,14 +429,6 @@ static std::vector<char> readFile(const std::string& filename)
 	return buffer;
 }
 
-void Renderer::createDescriptorSetLayout()
-{
-	vk::DescriptorSetLayoutBinding uboLayoutBinding{
-			.binding = 0, .descriptorType = vk::DescriptorType::eUniformBuffer, .descriptorCount = 1, .stageFlags = vk::ShaderStageFlagBits::eVertex };
-	vk::DescriptorSetLayoutCreateInfo layoutInfo{ .bindingCount = 1, .pBindings = &uboLayoutBinding };
-	descriptorSetLayout = vk::raii::DescriptorSetLayout(device, layoutInfo);
-}
-
 void Renderer::createGraphicsPipeline()
 {
 	vk::raii::ShaderModule shaderModule = createShaderModule(readFile("shaders/slang.spv"));
@@ -416,8 +437,8 @@ void Renderer::createGraphicsPipeline()
 	vk::PipelineShaderStageCreateInfo fragShaderStageInfo{ .stage = vk::ShaderStageFlagBits::eFragment, .module = shaderModule, .pName = "fragMain" };
 	vk::PipelineShaderStageCreateInfo shaderStages[] = { vertShaderStageInfo, fragShaderStageInfo };
 
-	auto bindingDescription = Vertex::getBindingDescription();
-	auto attributeDescriptions = Vertex::getAttributeDescriptions();
+	auto                                     bindingDescription = Vertex::getBindingDescription();
+	auto                                     attributeDescriptions = Vertex::getAttributeDescriptions();
 	vk::PipelineVertexInputStateCreateInfo   vertexInputInfo{ .vertexBindingDescriptionCount = 1,
 															 .pVertexBindingDescriptions = &bindingDescription,
 															 .vertexAttributeDescriptionCount = static_cast<uint32_t>(attributeDescriptions.size()),
@@ -447,7 +468,7 @@ void Renderer::createGraphicsPipeline()
 	std::vector<vk::DynamicState>      dynamicStates = { vk::DynamicState::eViewport, vk::DynamicState::eScissor };
 	vk::PipelineDynamicStateCreateInfo dynamicState{ .dynamicStateCount = static_cast<uint32_t>(dynamicStates.size()), .pDynamicStates = dynamicStates.data() };
 
-	vk::PipelineLayoutCreateInfo pipelineLayoutInfo{ .setLayoutCount = 1, .pSetLayouts = &*descriptorSetLayout, .pushConstantRangeCount = 0 };
+	vk::PipelineLayoutCreateInfo pipelineLayoutInfo{ .setLayoutCount = 0, .pushConstantRangeCount = 0 };
 	pipelineLayout = vk::raii::PipelineLayout(device, pipelineLayoutInfo);
 
 	vk::StructureChain<vk::GraphicsPipelineCreateInfo, vk::PipelineRenderingCreateInfo> pipelineCreateInfoChain = {
@@ -511,10 +532,9 @@ void Renderer::recordCommandBuffer(uint32_t imageIndex)
 	commandBuffer.beginRendering(renderingInfo);
 	commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, *graphicsPipeline);
 	commandBuffer.bindVertexBuffers(0, *vertexBuffer, { 0 });
-	commandBuffer.bindIndexBuffer(*indexBuffer, 0, vk::IndexType::eUint16);
-	commandBuffer.setViewport(0, vk::Viewport(0.0f, static_cast<float>(swapChainExtent.height), static_cast<float>(swapChainExtent.width), -static_cast<float>(swapChainExtent.height), 0.0f, 1.0f));
+	commandBuffer.setViewport(0, vk::Viewport(0.0f, 0.0f, static_cast<float>(swapChainExtent.width), static_cast<float>(swapChainExtent.height), 0.0f, 1.0f));
 	commandBuffer.setScissor(0, vk::Rect2D(vk::Offset2D(0, 0), swapChainExtent));
-	commandBuffer.drawIndexed(static_cast<uint32_t>(indices.size()), 1, 0, 0, 0);
+	commandBuffer.draw(static_cast<uint32_t>(vertices.size()), 1, 0, 0);
 	commandBuffer.endRendering();
 
 	// Transition the image layout for presentation
@@ -549,86 +569,10 @@ std::pair<vk::raii::Buffer, vk::raii::DeviceMemory> Renderer::createBuffer(vk::D
 	return { std::move(buffer), std::move(bufferMemory) };
 }
 
-void Renderer::createVertexBuffer()
-{
-	vk::DeviceSize bufferSize = sizeof(vertices[0]) * vertices.size();
-
-	auto [stagingBuffer, stagingBufferMemory] =
-		createBuffer(bufferSize, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
-
-	void* dataStaging = stagingBufferMemory.mapMemory(0, bufferSize);
-	memcpy(dataStaging, vertices.data(), bufferSize);
-	stagingBufferMemory.unmapMemory();
-
-	std::tie(vertexBuffer, vertexBufferMemory) =
-		createBuffer(bufferSize, vk::BufferUsageFlagBits::eVertexBuffer | vk::BufferUsageFlagBits::eTransferDst, vk::MemoryPropertyFlagBits::eDeviceLocal);
-
-	copyBuffer(stagingBuffer, vertexBuffer, bufferSize);
-}
-
-void Renderer::copyBuffer(vk::raii::Buffer& srcBuffer, vk::raii::Buffer& dstBuffer, vk::DeviceSize size)
-{
-	vk::CommandBufferAllocateInfo allocInfo{ .commandPool = commandPool, .level = vk::CommandBufferLevel::ePrimary, .commandBufferCount = 1 };
-	vk::raii::CommandBuffer commandCopyBuffer = std::move(device.allocateCommandBuffers(allocInfo).front());
-
-	commandCopyBuffer.begin({ .flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit });
-
-	commandCopyBuffer.copyBuffer(*srcBuffer, *dstBuffer, vk::BufferCopy(0, 0, size));
-
-	commandCopyBuffer.end();
-
-	graphicsQueue.submit(vk::SubmitInfo{.commandBufferCount = 1, .pCommandBuffers = &*commandCopyBuffer }, nullptr);
-	graphicsQueue.waitIdle();
-}
-
-void Renderer::createIndexBuffer()
-{
-	vk::DeviceSize bufferSize = sizeof(indices[0]) * indices.size();
-
-	auto [stagingBuffer, stagingBufferMemory] =
-		createBuffer(bufferSize, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
-
-	void* data = stagingBufferMemory.mapMemory(0, bufferSize);
-	memcpy(data, indices.data(), (size_t)bufferSize);
-	stagingBufferMemory.unmapMemory();
-
-	std::tie(indexBuffer, indexBufferMemory) =
-		createBuffer(bufferSize, vk::BufferUsageFlagBits::eIndexBuffer | vk::BufferUsageFlagBits::eTransferDst, vk::MemoryPropertyFlagBits::eDeviceLocal);
-
-	copyBuffer(stagingBuffer, indexBuffer, bufferSize);
-}
-
-void Renderer::createUniformBuffers()
-{
-	for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
-	{
-		vk::DeviceSize bufferSize = sizeof(UniformBufferObject);
-		auto [buffer, bufferMem] = createBuffer(
-			bufferSize, vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
-		uniformBuffers.emplace_back(std::move(buffer));
-		uniformBuffersMemory.emplace_back(std::move(bufferMem));
-		uniformBuffersMapped.emplace_back(uniformBuffersMemory.back().mapMemory(0, bufferSize));
-	}
-}
-
 void Renderer::createCommandBuffers()
 {
 	vk::CommandBufferAllocateInfo allocInfo{ .commandPool = commandPool, .level = vk::CommandBufferLevel::ePrimary, .commandBufferCount = MAX_FRAMES_IN_FLIGHT };
 	commandBuffers = vk::raii::CommandBuffers(device, allocInfo);
-
-}
-
-uint32_t Renderer::findMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags properties) {
-
-	vk::PhysicalDeviceMemoryProperties memProperties = physicalDevice.getMemoryProperties();
-
-	for (uint32_t i = 0; i < memProperties.memoryTypeCount; i++)
-	{
-		if ((typeFilter & (1 << i)) && (memProperties.memoryTypes[i].propertyFlags & properties) == properties)
-		{
-			return i;
-		}
-	}
 }
 
 void Renderer::transition_image_layout(
@@ -670,6 +614,7 @@ void Renderer::drawFrame()
 	{
 		throw std::runtime_error("failed to wait for fence!");
 	}
+	device.resetFences(*inFlightFences[frameIndex]);
 
 	auto [result, imageIndex] = swapChain.acquireNextImage(UINT64_MAX, *presentCompleteSemaphores[frameIndex], nullptr);
 
@@ -683,7 +628,6 @@ void Renderer::drawFrame()
 		assert(result == vk::Result::eTimeout || result == vk::Result::eNotReady);
 		throw std::runtime_error("failed to acquire swap chain image!");
 	}
-	updateUniformBuffer(frameIndex);
 
 	device.resetFences(*inFlightFences[frameIndex]);
 
@@ -691,8 +635,6 @@ void Renderer::drawFrame()
 	recordCommandBuffer(imageIndex);
 	graphicsQueue.waitIdle();
 	vk::PipelineStageFlags waitDestinationStageMask(vk::PipelineStageFlagBits::eColorAttachmentOutput);
-
-
 	const vk::SubmitInfo   submitInfo{ .waitSemaphoreCount = 1,
 									  .pWaitSemaphores = &*presentCompleteSemaphores[frameIndex],
 									  .pWaitDstStageMask = &waitDestinationStageMask,
@@ -719,24 +661,6 @@ void Renderer::drawFrame()
 		assert(result == vk::Result::eSuccess);
 	}
 	frameIndex = (frameIndex + 1) % MAX_FRAMES_IN_FLIGHT;
-}
-
-void Renderer::updateUniformBuffer(uint32_t currentImage)
-{
-	static auto startTime = std::chrono::high_resolution_clock::now();
-
-	auto currentTime = std::chrono::high_resolution_clock::now();
-	float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
-
-	UniformBufferObject ubo{};
-	ubo.model = rotate(glm::mat4(1.0f), time * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
-
-	ubo.view = lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
-
-	ubo.proj =
-		glm::perspective(glm::radians(45.0f), static_cast<float>(swapChainExtent.width) / static_cast<float>(swapChainExtent.height), 0.1f, 10.0f);
-
-	memcpy(uniformBuffersMapped[currentImage], &ubo, sizeof(ubo));
 }
 
 void Renderer::createSyncObjects()

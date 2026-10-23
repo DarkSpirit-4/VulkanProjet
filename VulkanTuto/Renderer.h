@@ -25,9 +25,6 @@ public:
 	void createVertexBuffer();
 	void copyBuffer(vk::raii::Buffer& srcBuffer, vk::raii::Buffer& dstBuffer, vk::DeviceSize size);
 	void createIndexBuffer();
-	void createDescriptorSetLayout();
-	void createUniformBuffers();
-	void updateUniformBuffer(uint32_t currentImage);
 
 private:
 	vk::raii::Context context;
@@ -42,7 +39,6 @@ private:
 	vk::raii::SwapchainKHR swapChain = nullptr;
 	std::vector<vk::Image> swapChainImages;
 	std::vector<vk::raii::ImageView> swapChainImageViews;
-	vk::raii::DescriptorSetLayout descriptorSetLayout = nullptr;
 	vk::raii::PipelineLayout pipelineLayout = nullptr;
 	vk::raii::Pipeline graphicsPipeline = nullptr;
 	vk::raii::CommandPool commandPool = nullptr;
@@ -56,10 +52,6 @@ private:
 	vk::raii::DeviceMemory vertexBufferMemory = nullptr;
 	vk::raii::Buffer indexBuffer = nullptr;
 	vk::raii::DeviceMemory indexBufferMemory = nullptr;
-	std::vector<vk::raii::Buffer> uniformBuffers;
-	std::vector<vk::raii::DeviceMemory> uniformBuffersMemory;
-	std::vector<void*> uniformBuffersMapped;
-	vk::PipelineLayoutCreateInfo pipelineLayoutInfo{ .setLayoutCount = 1, .pSetLayouts = &*descriptorSetLayout, .pushConstantRangeCount = 0 };
 
 
 
@@ -86,7 +78,7 @@ private:
 	static VKAPI_ATTR vk::Bool32 VKAPI_CALL Callback(vk::DebugUtilsMessageSeverityFlagBitsEXT severity, vk::DebugUtilsMessageTypeFlagsEXT type, const vk::DebugUtilsMessengerCallbackDataEXT* pCallbackData, void* pUserData);
 	vk::raii::SurfaceKHR surface = nullptr;
 
-	
+
 
 	std::vector<const char*> requiredDeviceExtension = {
 	vk::KHRSwapchainExtensionName };
