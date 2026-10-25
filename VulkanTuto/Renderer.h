@@ -1,24 +1,35 @@
 #pragma once
 
 #include "Dependancies.h"
+#include "VulkanContext.h"
+#include "SwapChain.h"
+#include "DepthBuffer.h"
+#include "Texture.h"
+#include "Mesh.h"
+#include "Pipeline.h"
+
+constexpr int MAX_FRAMES_IN_FLIGHT = 2;
 
 class Renderer
 {
 public:
-	void CreateInstance();
-	void pickPhysicalDevice();
-	void createLogicalDevice();
-	void createSurface();
-	void createSwapChain();
-	void createImageViews();
-	void createGraphicsPipeline();
-	void SetWindow(GLFWwindow* window);
-	void recordCommandBuffer(uint32_t imageIndex);
-	void createCommandPool();
-	void createCommandBuffers();
+	void Init(GLFWwindow* window);
+	void WaitIdle() { ctx.WaitIdle(); }
+	void SetFramebufferResized() { framebufferResized = true; }
 	void drawFrame();
+
+private:
+	void createUniformBuffers();
+	void createDescriptorPool();
+	void createDescriptorSets();
+	void createCommandBuffers();
 	void createSyncObjects();
-	void transition_image_layout(
+
+	void recreateSwapChain();
+	void updateUniformBuffer(uint32_t currentImage);
+	void recordCommandBuffer(uint32_t imageIndex);
+	void transitionImageLayout(
+		vk::raii::CommandBuffer& commandBuffer,
 		vk::Image               image,
 		vk::ImageLayout         old_layout,
 		vk::ImageLayout         new_layout,
@@ -27,100 +38,27 @@ public:
 		vk::PipelineStageFlags2 src_stage_mask,
 		vk::PipelineStageFlags2 dst_stage_mask,
 		vk::ImageAspectFlags    image_aspect_flags);
-	void SetupCallback();
-	void cleanupSwapChain();
-	void recreateSwapChain();
-	void createVertexBuffer();
-	void copyBuffer(vk::raii::Buffer& srcBuffer, vk::raii::Buffer& dstBuffer, vk::DeviceSize size);
-	void createIndexBuffer();
-	void createDescriptorSetLayout();
-	void createUniformBuffers();
-	void updateUniformBuffer(uint32_t currentImage);
-	void createDescriptorPool();
-	void createDescriptorSets();
-	void createTextureImage();
-	void transitionImageLayout(vk::raii::CommandBuffer& commandBuffer, const vk::raii::Image& image, vk::ImageLayout oldLayout, vk::ImageLayout newLayout);
-	void copyBufferToImage(vk::raii::CommandBuffer& commandBuffer, const vk::raii::Buffer& buffer, vk::raii::Image& image, uint32_t width, uint32_t height);
-	void createTextureImageView();
-	void createTextureSampler();
-	void createDepthResources();
-
-private:
-	vk::raii::Context context;
-	vk::raii::Instance instance = nullptr;
-	vk::raii::DebugUtilsMessengerEXT debugMessenger = nullptr;
-	vk::raii::PhysicalDevice physicalDevice = nullptr;
-	vk::raii::Device device = nullptr;
-	vk::PhysicalDeviceFeatures deviceFeatures;
-	vk::raii::Queue graphicsQueue = nullptr;
-	vk::SurfaceFormatKHR swapChainSurfaceFormat;
-	vk::Extent2D swapChainExtent;
-	vk::raii::SwapchainKHR swapChain = nullptr;
-	std::vector<vk::Image> swapChainImages;
-	std::vector<vk::raii::ImageView> swapChainImageViews;
-	vk::raii::DescriptorSetLayout descriptorSetLayout = nullptr;
-	vk::raii::PipelineLayout pipelineLayout = nullptr;
-	vk::raii::Pipeline graphicsPipeline = nullptr;
-	vk::raii::CommandPool commandPool = nullptr;
-	std::vector<vk::raii::CommandBuffer> commandBuffers;
-	uint32_t queueIndex = ~0;
-	std::vector<vk::raii::Semaphore> presentCompleteSemaphores;
-	std::vector<vk::raii::Semaphore> renderFinishedSemaphores;
-	std::vector<vk::raii::Fence> inFlightFences;
-	bool framebufferResized = false;
-	vk::raii::Buffer vertexBuffer = nullptr;
-	vk::raii::DeviceMemory vertexBufferMemory = nullptr;
-	vk::raii::Buffer indexBuffer = nullptr;
-	vk::raii::DeviceMemory indexBufferMemory = nullptr;
-	std::vector<vk::raii::Buffer>       uniformBuffers;
-	std::vector<vk::raii::DeviceMemory> uniformBuffersMemory;
-	std::vector<void*>                 uniformBuffersMapped;
-	vk::raii::DescriptorPool descriptorPool = nullptr;
-	std::vector<vk::raii::DescriptorSet> descriptorSets;
-	vk::raii::Image        textureImage = nullptr;
-	vk::raii::DeviceMemory textureImageMemory = nullptr;
-	vk::raii::ImageView textureImageView = nullptr;
-	vk::raii::Sampler textureSampler = nullptr;
-	vk::raii::Image        depthImage = nullptr;
-	vk::raii::DeviceMemory depthImageMemory = nullptr;
-	vk::raii::ImageView    depthImageView = nullptr;
-
-
-	uint32_t frameIndex = 0;
-
 
 	GLFWwindow* window = nullptr;
 
-	vk::SurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<vk::SurfaceFormatKHR>& availableFormats);
-	vk::PresentModeKHR chooseSwapPresentMode(std::vector<vk::PresentModeKHR> const& availablePresentModes);
-	vk::Extent2D chooseSwapExtent(vk::SurfaceCapabilitiesKHR const& capabilities);
-	uint32_t chooseSwapMinImageCount(vk::SurfaceCapabilitiesKHR const& surfaceCapabilities);
-	[[nodiscard]] vk::raii::ShaderModule createShaderModule(const std::vector<char>& code) const;
-	uint32_t findMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags properties);
-	std::pair<vk::raii::Buffer, vk::raii::DeviceMemory> createBuffer(vk::DeviceSize size, vk::BufferUsageFlags usage, vk::MemoryPropertyFlags properties);
+	VulkanContext ctx;
+	SwapChain     swapChain;
+	DepthBuffer   depthBuffer;
+	Pipeline      pipeline;
+	Texture       texture;
+	Mesh          mesh;
 
+	std::vector<vk::raii::Buffer>        uniformBuffers;
+	std::vector<vk::raii::DeviceMemory>  uniformBuffersMemory;
+	std::vector<void*>                   uniformBuffersMapped;
+	vk::raii::DescriptorPool             descriptorPool = nullptr;
+	std::vector<vk::raii::DescriptorSet> descriptorSets;
+	std::vector<vk::raii::CommandBuffer> commandBuffers;
 
-	std::vector<char const*> GetRequiredExtensions();
-	std::vector<char const*> GetRequiredLayers();
+	std::vector<vk::raii::Semaphore> presentCompleteSemaphores;
+	std::vector<vk::raii::Semaphore> renderFinishedSemaphores;
+	std::vector<vk::raii::Fence>     inFlightFences;
 
-
-	std::pair<vk::raii::Image, vk::raii::DeviceMemory> createImage(
-		uint32_t width, uint32_t height, vk::Format format, vk::ImageTiling tiling,
-		vk::ImageUsageFlags usage, vk::MemoryPropertyFlags properties);
-
-	vk::raii::CommandBuffer beginSingleTimeCommands();
-	void endSingleTimeCommands(vk::raii::CommandBuffer&& commandBuffer);
-
-	vk::raii::ImageView createImageView(vk::Image const& image, vk::Format format, vk::ImageAspectFlags aspectFlags);
-	vk::Format findSupportedFormat(const std::vector<vk::Format>& candidates, vk::ImageTiling tiling, vk::FormatFeatureFlags features);
-	vk::Format findDepthFormat();
-
-
-	static VKAPI_ATTR vk::Bool32 VKAPI_CALL Callback(vk::DebugUtilsMessageSeverityFlagBitsEXT severity, vk::DebugUtilsMessageTypeFlagsEXT type, const vk::DebugUtilsMessengerCallbackDataEXT* pCallbackData, void* pUserData);
-	vk::raii::SurfaceKHR surface = nullptr;
-
-
-
-	std::vector<const char*> requiredDeviceExtension = {
-	vk::KHRSwapchainExtensionName };
+	uint32_t frameIndex = 0;
+	bool     framebufferResized = false;
 };

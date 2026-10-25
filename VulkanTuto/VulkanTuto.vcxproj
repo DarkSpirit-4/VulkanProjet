@@ -152,17 +152,29 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="Application.cpp" />
-    <ClCompile Include="Debug.cpp" />
-    <ClCompile Include="Dependancies.cpp" />
+    <ClCompile Include="Depthbuffer.cpp" />
+    <ClCompile Include="Mesh.cpp" />
+    <ClCompile Include="Pipeline.cpp" />
     <ClCompile Include="Renderer.cpp" />
+    <ClCompile Include="Swapchain.cpp" />
+    <ClCompile Include="Texture.cpp" />
+    <ClCompile Include="Vulkancontext.cpp" />
     <ClCompile Include="VulkanTuto.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Application.h" />
     <ClInclude Include="Debug.h" />
     <ClInclude Include="Dependancies.h" />
+    <ClInclude Include="Depthbuffer.h" />
+    <ClInclude Include="Geometry.h" />
+    <ClInclude Include="Mesh.h" />
+    <ClInclude Include="Pipeline.h" />
     <ClInclude Include="Renderer.h" />
     <ClInclude Include="stb_image.h" />
+    <ClInclude Include="Swapchain.h" />
+    <ClInclude Include="Texture.h" />
+    <ClInclude Include="Vertex.h" />
+    <ClInclude Include="Vulkancontext.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

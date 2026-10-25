@@ -3,7 +3,9 @@
 void Application::Init()
 {
     InitWindow();
-    InitVulkan();
+
+    renderer = std::make_unique<Renderer>();
+    renderer->Init(window);
 }
 
 void Application::Run()
@@ -17,7 +19,12 @@ void Application::Run()
 
 void Application::Destroy()
 {
-    DestroyVulkan();
+    if (renderer)
+    {
+        renderer->WaitIdle();
+        renderer.reset();
+    }
+
     DestroyWindow();
 }
 
@@ -26,7 +33,7 @@ void Application::InitWindow()
     glfwInit();
 
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-    glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
+    glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
 
     window = glfwCreateWindow(width, height, "Vulkan", nullptr, nullptr);
     glfwSetWindowUserPointer(window, this);
@@ -36,45 +43,12 @@ void Application::InitWindow()
 void Application::framebufferResizeCallback(GLFWwindow* window, int width, int height)
 {
     auto app = reinterpret_cast<Application*>(glfwGetWindowUserPointer(window));
-    app->framebufferResized = true;
-}
-
-void Application::InitVulkan()
-{
-    renderer = new Renderer();
-    renderer->SetWindow(window);
-
-    renderer->CreateInstance();
-    renderer->createSurface();
-    renderer->pickPhysicalDevice();
-    renderer->createLogicalDevice();
-    renderer->createSwapChain();
-    renderer->createImageViews();
-    renderer->createDescriptorSetLayout();
-    renderer->createGraphicsPipeline();
-    renderer->createCommandPool();
-    renderer->createDepthResources();
-    renderer->createTextureImage();
-    renderer->createTextureImageView();
-    renderer->createTextureSampler();
-    renderer->createVertexBuffer();
-    renderer->createIndexBuffer();
-    renderer->createUniformBuffers();
-    renderer->createDescriptorPool();
-    renderer->createDescriptorSets();
-    renderer->createCommandBuffers();
-    renderer->createSyncObjects();
-
+    if (app->renderer)
+        app->renderer->SetFramebufferResized();
 }
 
 void Application::DestroyWindow()
 {
-    renderer->cleanupSwapChain();
     glfwDestroyWindow(window);
     glfwTerminate();
-}
-
-void Application::DestroyVulkan()
-{
-
 }
