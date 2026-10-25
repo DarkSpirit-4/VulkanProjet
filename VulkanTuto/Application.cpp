@@ -45,15 +45,23 @@ void Application::InitVulkan()
     renderer->SetWindow(window);
 
     renderer->CreateInstance();
-    renderer->SetupCallback();
     renderer->createSurface();
     renderer->pickPhysicalDevice();
     renderer->createLogicalDevice();
     renderer->createSwapChain();
     renderer->createImageViews();
+    renderer->createDescriptorSetLayout();
     renderer->createGraphicsPipeline();
     renderer->createCommandPool();
+    renderer->createDepthResources();
+    renderer->createTextureImage();
+    renderer->createTextureImageView();
+    renderer->createTextureSampler();
     renderer->createVertexBuffer();
+    renderer->createIndexBuffer();
+    renderer->createUniformBuffers();
+    renderer->createDescriptorPool();
+    renderer->createDescriptorSets();
     renderer->createCommandBuffers();
     renderer->createSyncObjects();
 
